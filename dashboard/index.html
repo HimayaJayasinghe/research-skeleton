@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Skeleton-Based Person Identification System — Real-time identification using skeletal bone structure and gait patterns">
+    <title>Skeleton ID — Person Identification Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/dashboard/assets/styles.css">
+</head>
+<body>
+    <!-- ═══ SIDEBAR ═══════════════════════════════════════════════════════ -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-brand">
+            <div class="brand-icon">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="5" r="2"/>
+                    <line x1="12" y1="7" x2="12" y2="15"/>
+                    <line x1="12" y1="10" x2="8" y2="14"/>
+                    <line x1="12" y1="10" x2="16" y2="14"/>
+                    <line x1="12" y1="15" x2="9" y2="21"/>
+                    <line x1="12" y1="15" x2="15" y2="21"/>
+                </svg>
+            </div>
+            <span class="brand-text">SkeletonID</span>
+        </div>
+
+        <nav class="sidebar-nav">
+            <button class="nav-item active" data-tab="live" id="nav-live">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="23 7 16 12 23 17 23 7"/>
+                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+                </svg>
+                <span>Live Feed</span>
+            </button>
+            <button class="nav-item" data-tab="enroll" id="nav-enroll">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="8.5" cy="7" r="4"/>
+                    <line x1="20" y1="8" x2="20" y2="14"/>
+                    <line x1="23" y1="11" x2="17" y2="11"/>
+                </svg>
+                <span>Enroll</span>
+            </button>
+            <button class="nav-item" data-tab="users" id="nav-users">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                    <circle cx="9" cy="7" r="4"/>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+                <span>Users</span>
+            </button>
+            <button class="nav-item" data-tab="training" id="nav-training">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                </svg>
+                <span>Training</span>
+            </button>
+            <button class="nav-item" data-tab="stats" id="nav-stats">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <line x1="18" y1="20" x2="18" y2="10"/>
+                    <line x1="12" y1="20" x2="12" y2="4"/>
+                    <line x1="6" y1="20" x2="6" y2="14"/>
+                </svg>
+                <span>Statistics</span>
+            </button>
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="system-status" id="system-status">
+                <div class="status-dot offline"></div>
+                <span>Disconnected</span>
+            </div>
+        </div>
+    </aside>
+
+    <!-- ═══ MAIN CONTENT ═════════════════════════════════════════════════ -->
+    <main class="main-content">
+
+        <!-- ─── LIVE FEED TAB ──────────────────────────────────────────── -->
+        <section class="tab-panel active" id="tab-live">
+            <div class="panel-header">
+                <h1>Live Identification</h1>
+                <div class="header-actions">
+                    <div class="fps-badge" id="fps-badge">-- FPS</div>
+                    <button class="btn btn-primary" id="btn-start-camera">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                        Start Camera
+                    </button>
+                    <button class="btn btn-danger hidden" id="btn-stop-camera">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>
+                        Stop
+                    </button>
+                </div>
+            </div>
+
+            <div class="live-grid">
+                <!-- Video Feed -->
+                <div class="video-container glass-card">
+                    <video id="webcam-video" autoplay playsinline muted></video>
+                    <canvas id="skeleton-canvas"></canvas>
+                    <div class="video-overlay" id="video-overlay">
+                        <div class="overlay-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                                <polygon points="23 7 16 12 23 17 23 7"/>
+                                <rect x="1" y="5" width="15" height="14" rx="2"/>
+                            </svg>
+                        </div>
+                        <p>Click "Start Camera" to begin</p>
+                    </div>
+                    <!-- Identification Badge -->
+                    <div class="id-badge hidden" id="id-badge">
+                        <div class="id-badge-name" id="id-badge-name">Unknown</div>
+                        <div class="id-badge-conf" id="id-badge-conf">0%</div>
+                    </div>
+                </div>
+
+                <!-- Info Panel -->
+                <div class="info-panel">
+                    <!-- Current Identification -->
+                    <div class="info-card glass-card">
+                        <h3>Identification</h3>
+                        <div class="id-result" id="id-result">
+                            <div class="id-avatar" id="id-avatar">?</div>
+                            <div class="id-info">
+                                <div class="id-name" id="id-name">No person detected</div>
+                                <div class="id-method" id="id-method">—</div>
+                            </div>
+                        </div>
+                        <div class="confidence-bar-container">
+                            <div class="confidence-bar" id="confidence-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="confidence-label" id="confidence-label">Confidence: 0%</div>
+                    </div>
+
+                    <!-- Current Person -->
+                    <div class="info-card glass-card">
+                        <h3>Current Person</h3>
+                        <div class="candidates-list" id="candidates-list">
+                            <div class="empty-state-small">Waiting for data...</div>
+                        </div>
+                    </div>
+
+                    <!-- Pipeline Stats -->
+                    <div class="info-card glass-card">
+                        <h3>Pipeline</h3>
+                        <div class="stat-row">
+                            <span>Latency</span>
+                            <span class="stat-value" id="stat-latency">-- ms</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Features</span>
+                            <span class="stat-value" id="stat-features">--</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Gait Buffer</span>
+                            <span class="stat-value" id="stat-gait">-- / 30</span>
+                        </div>
+                        <div class="stat-row">
+                            <span>Method</span>
+                            <span class="stat-value" id="stat-method">--</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── ENROLL TAB ─────────────────────────────────────────────── -->
+        <section class="tab-panel" id="tab-enroll">
+            <div class="panel-header">
+                <h1>User Enrollment</h1>
+            </div>
+            <div class="enroll-container">
+                <div class="enroll-form glass-card">
+                    <h3>New User</h3>
+                    <div class="form-group">
+                        <label for="enroll-name">Full Name</label>
+                        <input type="text" id="enroll-name" placeholder="e.g., John Doe" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label for="enroll-email">Email (optional)</label>
+                        <input type="email" id="enroll-email" placeholder="john@example.com" class="form-input">
+                    </div>
+                    <button class="btn btn-primary btn-block" id="btn-create-user">Create User</button>
+                    <hr class="divider">
+                    <div class="form-group">
+                        <label for="enroll-select">Select User to Enroll</label>
+                        <select id="enroll-select" class="form-select">
+                            <option value="">-- Select User --</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Camera Source</label>
+                        <div class="camera-source-toggle" style="display:flex; gap:0.5rem; margin-bottom:0.5rem;">
+                            <button class="btn btn-sm btn-secondary active" id="btn-cam-webcam" style="flex:1; padding:0.4rem 0.5rem; font-size:0.8rem;">💻 Webcam</button>
+                            <button class="btn btn-sm btn-outline" id="btn-cam-phone" style="flex:1; padding:0.4rem 0.5rem; font-size:0.8rem;">📱 Phone</button>
+                        </div>
+                        <div id="phone-camera-config" style="display:none;">
+                            <input type="text" id="phone-camera-url" placeholder="http://192.168.1.5:8080/video" class="form-input" style="margin-bottom:0.4rem;">
+                            <p style="font-size:0.7rem; color:var(--text-secondary); margin:0; line-height:1.4;">
+                                Install <strong>IP Webcam</strong> app on your Android phone → Start Server → Enter the URL above.
+                                Your phone &amp; PC must be on the same WiFi.
+                            </p>
+                        </div>
+                    </div>
+                    <button class="btn btn-accent btn-block" id="btn-start-enrollment" disabled>
+                        Start Enrollment Recording
+                    </button>
+                    <button class="btn btn-danger btn-block hidden" id="btn-stop-enrollment">
+                        Stop Recording
+                    </button>
+                </div>
+
+                <div class="enroll-preview glass-card">
+                    <video id="enroll-video" autoplay playsinline muted></video>
+                    <canvas id="enroll-canvas"></canvas>
+                    <div class="enroll-overlay" id="enroll-overlay">
+                        <p>Select a user and start enrollment</p>
+                    </div>
+                    <div class="enroll-progress" id="enroll-progress">
+                        <div class="progress-bar-bg">
+                            <div class="progress-bar-fill" id="enroll-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <span id="enroll-progress-text">0 frames (0%)</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── USERS TAB ──────────────────────────────────────────────── -->
+        <section class="tab-panel" id="tab-users">
+            <div class="panel-header">
+                <h1>Enrolled Users</h1>
+                <button class="btn btn-secondary" id="btn-refresh-users">Refresh</button>
+            </div>
+            <div class="users-grid" id="users-grid">
+                <div class="empty-state">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                        <circle cx="9" cy="7" r="4"/>
+                    </svg>
+                    <p>No users enrolled yet</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── TRAINING TAB ──────────────────────────────────────────── -->
+        <section class="tab-panel" id="tab-training">
+            <div class="panel-header">
+                <h1>Model Training</h1>
+            </div>
+            <div class="training-grid">
+                <div class="glass-card">
+                    <h3>Train Models</h3>
+                    <p class="text-muted">Train SVM and LSTM models using all enrolled user data.</p>
+                    <div class="form-group">
+                        <label for="train-type">Model Type</label>
+                        <select id="train-type" class="form-select">
+                            <option value="ensemble">Ensemble (SVM + LSTM)</option>
+                            <option value="svm">SVM Only</option>
+                            <option value="lstm">LSTM Only</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="train-epochs">LSTM Epochs</label>
+                        <input type="number" id="train-epochs" value="100" class="form-input" min="10" max="500">
+                    </div>
+                    <button class="btn btn-primary btn-block" id="btn-train">
+                        🚀 Start Training
+                    </button>
+                    <div class="training-status hidden" id="training-status">
+                        <div class="spinner"></div>
+                        <span>Training in progress...</span>
+                    </div>
+                </div>
+
+                <div class="glass-card">
+                    <h3>Model Status</h3>
+                    <div class="model-status-grid" id="model-status-grid">
+                        <div class="model-card">
+                            <div class="model-icon svm">SVM</div>
+                            <div class="model-info">
+                                <div class="model-state" id="svm-state">Not Trained</div>
+                                <div class="model-metric" id="svm-metric">—</div>
+                            </div>
+                        </div>
+                        <div class="model-card">
+                            <div class="model-icon lstm">LSTM</div>
+                            <div class="model-info">
+                                <div class="model-state" id="lstm-state">Not Trained</div>
+                                <div class="model-metric" id="lstm-metric">—</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Training Results -->
+                <div class="glass-card full-width" id="training-results-card" style="display:none;">
+                    <h3>Training Results</h3>
+                    <pre class="results-pre" id="training-results"></pre>
+                </div>
+            </div>
+        </section>
+
+        <!-- ─── STATS TAB ─────────────────────────────────────────────── -->
+        <section class="tab-panel" id="tab-stats">
+            <div class="panel-header">
+                <h1>System Statistics</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" id="btn-download-report">Download PDF Report</button>
+                    <button class="btn btn-secondary" id="btn-refresh-stats">Refresh</button>
+                </div>
+            </div>
+            <div class="stats-grid">
+                <div class="stat-card glass-card">
+                    <div class="stat-card-value" id="stat-total-users">0</div>
+                    <div class="stat-card-label">Enrolled Users</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-card-value" id="stat-total-ids">0</div>
+                    <div class="stat-card-label">Total Identifications</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-card-value" id="stat-avg-conf">0%</div>
+                    <div class="stat-card-label">Avg Confidence</div>
+                </div>
+                <div class="stat-card glass-card">
+                    <div class="stat-card-value" id="stat-avg-latency">0ms</div>
+                    <div class="stat-card-label">Avg Latency</div>
+                </div>
+            </div>
+
+            <div class="glass-card" style="margin-top: 1.5rem;">
+                <h3>Recent Identifications</h3>
+                <div class="recent-table-container">
+                    <table class="recent-table" id="recent-table">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Identified As</th>
+                                <th>Confidence</th>
+                                <th>Latency</th>
+                                <th>Method</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recent-tbody">
+                            <tr><td colspan="5" class="text-center text-muted">No data yet</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toast-container"></div>
+
+    <script src="/dashboard/assets/app.js"></script>
+</body>
+</html>

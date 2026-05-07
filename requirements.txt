@@ -1,0 +1,40 @@
+# ── Core Vision & AI ──────────────────────────────────────────────────────────
+opencv-python>=4.9.0
+mediapipe>=0.10.9
+ultralytics>=8.1.0          # YOLOv8 + ByteTrack built-in
+
+# ── Deep Learning ─────────────────────────────────────────────────────────────
+torch>=2.2.0
+torchvision>=0.17.0
+facenet-pytorch>=2.6.0      # MTCNN + InceptionResnetV1 (FaceNet)
+
+# ── API & Server ──────────────────────────────────────────────────────────────
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9     # File upload support
+websockets>=12.0
+
+# ── Database ──────────────────────────────────────────────────────────────────
+motor>=3.4.0                # Async MongoDB driver
+pymongo>=4.6.0
+pydantic>=2.6.0
+pydantic-settings>=2.2.0
+
+# ── Data Science ──────────────────────────────────────────────────────────────
+numpy>=1.26.0,<2.0.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+scipy>=1.12.0
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv>=1.0.0
+structlog>=24.1.0
+pyyaml>=6.0.1
+httpx>=0.27.0               # Async HTTP (notifier webhooks)
+pillow>=10.2.0
+joblib>=1.3.0
+reportlab>=4.2.0
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+pytest>=8.1.0
+pytest-asyncio>=0.23.0
