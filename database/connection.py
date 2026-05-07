@@ -178,12 +178,7 @@ class LocalCollection:
                 modified += 1
         await self._save_data(data)
 
-    async def delete_one(self, query: Dict):
-        data = await self._get_data()
-        new_data = [d for d in data if not all(d.get(k) == v for k, v in query.items())]
-        deleted = len(data) - len(new_data)
-        await self._save_data(new_data)
-        return type('Result', (), {'deleted_count': deleted})()
+
 
     async def count_documents(self, query: Dict):
         data = await self._get_data()

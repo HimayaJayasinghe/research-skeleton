@@ -89,6 +89,8 @@ class IdentificationResult(BaseModel):
 
 class IdentificationLog(BaseModel):
     """Log entry for identification attempts (stored in MongoDB)."""
+    model_config = {"protected_namespaces": ()}
+    
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     predicted_user_id: Optional[str] = None
     confidence: float = 0.0
@@ -125,6 +127,8 @@ class PoseEstimationResult(BaseModel):
 
 class TrainedModelRecord(BaseModel):
     """Record of a trained model stored in MongoDB."""
+    model_config = {"protected_namespaces": ()}
+
     model_type: str  # svm | lstm | ensemble
     version: str
     trained_at: datetime = Field(default_factory=datetime.utcnow)
@@ -143,12 +147,16 @@ class TrainedModelRecord(BaseModel):
 
 class TrainRequest(BaseModel):
     """Request to trigger model training."""
+    model_config = {"protected_namespaces": ()}
+
     model_type: str = "ensemble"  # svm | lstm | ensemble
     force_retrain: bool = False
 
 
 class TrainResponse(BaseModel):
     """Response after model training."""
+    model_config = {"protected_namespaces": ()}
+
     success: bool
     model_type: str
     version: str
