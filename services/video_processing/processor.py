@@ -119,23 +119,20 @@ class VideoProcessor:
         Steps:
         1. Resize to target dimensions
         2. Convert BGR to RGB (MediaPipe expects RGB)
-        3. Normalize brightness using CLAHE
+
+        Note: CLAHE brightness normalization was removed for performance.
+        MediaPipe handles varying lighting conditions well natively.
         """
-        # Resize
-        processed = cv2.resize(
-            frame, self.target_size, interpolation=cv2.INTER_LINEAR
-        )
+        h, w = frame.shape[:2]
+        tw, th = self.target_size
+        if w != tw or h != th:
+            processed = cv2.resize(
+                frame, self.target_size, interpolation=cv2.INTER_LINEAR
+            )
+        else:
+            processed = frame
         # Convert BGR → RGB
         processed = cv2.cvtColor(processed, cv2.COLOR_BGR2RGB)
-
-        # Brightness normalization using CLAHE on L channel
-        lab = cv2.cvtColor(processed, cv2.COLOR_RGB2LAB)
-        l_channel, a, b = cv2.split(lab)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-        l_channel = clahe.apply(l_channel)
-        lab = cv2.merge([l_channel, a, b])
-        processed = cv2.cvtColor(lab, cv2.COLOR_LAB2RGB)
-
         return processed
 
     def should_process(self) -> bool:

@@ -245,9 +245,9 @@ class SkeletonLSTM:
                     logits = self.model(batch_X)
                     loss = criterion(logits, batch_y)
                     val_loss += loss.item()
-                    preds = logits.argmax(dim=1).cpu().numpy()
+                    preds = logits.argmax(dim=1).detach().cpu().tolist()
                     all_preds.extend(preds)
-                    all_true.extend(batch_y.cpu().numpy())
+                    all_true.extend(batch_y.cpu().tolist())
 
             val_loss /= len(val_loader)
             val_f1 = f1_score(all_true, all_preds, average="macro")
@@ -284,9 +284,9 @@ class SkeletonLSTM:
             for batch_X, batch_y in val_loader:
                 batch_X = batch_X.to(self.device)
                 logits = self.model(batch_X)
-                preds = logits.argmax(dim=1).cpu().numpy()
+                preds = logits.argmax(dim=1).detach().cpu().tolist()
                 all_preds.extend(preds)
-                all_true.extend(batch_y.numpy())
+                all_true.extend(batch_y.tolist())
 
         report = classification_report(
             all_true, all_preds,
@@ -342,7 +342,7 @@ class SkeletonLSTM:
 
         with torch.no_grad():
             logits = self.model(x)
-            probs = torch.softmax(logits, dim=1).cpu().numpy()[0]
+            probs = torch.softmax(logits, dim=1).detach().cpu().tolist()[0]
 
         sorted_idx = np.argsort(probs)[::-1]
         candidates = [

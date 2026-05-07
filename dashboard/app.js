@@ -123,6 +123,7 @@ function stopCamera() {
     }
 
     if (state.frameLoopTimer) {
+        cancelAnimationFrame(state.frameLoopTimer);
         clearTimeout(state.frameLoopTimer);
         state.frameLoopTimer = null;
     }
@@ -175,6 +176,12 @@ function connectWebSocket() {
     };
 }
 
+// Reusable offscreen canvas (avoid per-frame allocation)
+const _offscreenCanvas = document.createElement("canvas");
+_offscreenCanvas.width = 480;
+_offscreenCanvas.height = 360;
+const _offscreenCtx = _offscreenCanvas.getContext("2d");
+
 function sendFrameLoop() {
     state.frameLoopTimer = null;
 
@@ -184,6 +191,12 @@ function sendFrameLoop() {
 
     if (state.ws.readyState !== WebSocket.OPEN) {
         scheduleFrameLoop(100);
+        return;
+    }
+
+    // Back-pressure: skip frame if WebSocket send buffer is backed up
+    if (state.ws.bufferedAmount > 50000) {
+        scheduleFrameLoop(16);
         return;
     }
 
@@ -202,16 +215,11 @@ function sendFrameLoop() {
         return;
     }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = 640;
-    canvas.height = 480;
-    const ctx = canvas.getContext("2d");
-    
     try {
-        ctx.drawImage(source, 0, 0, 640, 480);
-        
+        _offscreenCtx.drawImage(source, 0, 0, 480, 360);
+
         // Get frame as base64
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.6);
+        const dataUrl = _offscreenCanvas.toDataURL("image/jpeg", 0.4);
         const base64 = dataUrl.split(",")[1];
 
         const msg = {
@@ -222,15 +230,13 @@ function sendFrameLoop() {
 
         state.ws.send(JSON.stringify(msg));
 
-        // If it's a phone camera "shot" URL, we need to refresh the source for the NEXT loop
+        // If it's a phone camera "shot" URL, refresh source for next loop
         if (state.isEnrolling && state.usePhoneCamera && state.phoneImage) {
-            // Add cache buster to URL to force fresh frame
             const baseUrl = state.phoneCameraUrl.split("?")[0];
             state.phoneImage.src = `${baseUrl}?t=${Date.now()}`;
         }
     } catch (e) {
         console.warn("Frame capture error (likely CORS):", e);
-        // Don't let the loop die, it might recover or work for webcam
     }
 
     // FPS counter
@@ -243,8 +249,8 @@ function sendFrameLoop() {
         $("#fps-badge").textContent = `${state.fps} FPS`;
     }
 
-    // Next frame (~15 FPS to balance load)
-    scheduleFrameLoop(66);
+    // Next frame — use rAF for vsync-aligned rendering
+    scheduleFrameLoop(0);
 }
 
 function scheduleFrameLoop(delay = 0) {
@@ -252,10 +258,17 @@ function scheduleFrameLoop(delay = 0) {
         return;
     }
 
-    state.frameLoopTimer = setTimeout(() => {
-        state.frameLoopTimer = null;
-        sendFrameLoop();
-    }, delay);
+    if (delay === 0) {
+        state.frameLoopTimer = requestAnimationFrame(() => {
+            state.frameLoopTimer = null;
+            sendFrameLoop();
+        });
+    } else {
+        state.frameLoopTimer = setTimeout(() => {
+            state.frameLoopTimer = null;
+            sendFrameLoop();
+        }, delay);
+    }
 }
 
 function handleStreamResult(data) {
@@ -594,6 +607,7 @@ function stopEnrollment() {
     state.enrollUserId = null;
     state.isStreaming = false;
     if (state.frameLoopTimer) {
+        cancelAnimationFrame(state.frameLoopTimer);
         clearTimeout(state.frameLoopTimer);
         state.frameLoopTimer = null;
     }

@@ -10,6 +10,12 @@ Serves:
 import os
 import sys
 import structlog
+import warnings
+
+# Suppress protobuf deprecation warnings coming from mediapipe/tensorflow
+warnings.filterwarnings("ignore", category=UserWarning, module="google.protobuf.symbol_database")
+warnings.filterwarnings("ignore", message=".*SymbolDatabase.GetPrototype() is deprecated.*")
+
 from pathlib import Path
 from contextlib import asynccontextmanager
 from fastapi import FastAPI

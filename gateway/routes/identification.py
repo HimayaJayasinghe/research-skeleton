@@ -107,7 +107,7 @@ async def enroll_frame(req: EnrollFrameRequest):
     await FeatureProfileCRUD.upsert(
         user_id=req.user_id,
         static_vector=req.static_features,
-        gait_vector=req.gait_features,
+        gait_sequence=[req.gait_features] if req.gait_features else None,
     )
 
     # Update enrollment progress

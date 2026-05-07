@@ -10,6 +10,7 @@ Flow:
     -> Identification (ensemble predict)
     -> Send result JSON back to client
 """
+import asyncio
 import json
 import time
 from typing import Dict, Optional
@@ -52,6 +53,15 @@ class StreamPipeline:
         self.frame_count = 0
         self.user_name_map: Dict[str, str] = {}
         self._last_user_cache_refresh = 0.0
+        # Performance: skip heavy identification on some frames
+        self._identify_every_n = 2  # run prediction every Nth frame
+        self._last_identification: Dict = {
+            "predicted_user": "unknown",
+            "confidence": 0.0,
+            "is_known": False,
+            "method": "none",
+            "top_k": [],
+        }
 
     async def _refresh_user_name_map(self):
         """Refresh user id -> name cache periodically to avoid per-frame DB reads."""
@@ -143,10 +153,17 @@ class StreamPipeline:
         gait_ready = self.gait_ext.is_ready()
         gait_sequence = self.gait_ext.get_sequence_matrix() if gait_ready else None
 
-        identification = self.predictor.identify(
-            static_features=static_vector,
-            gait_sequence=gait_sequence,
-        )
+        # Only run identification every N frames to reduce latency
+        should_identify = (self.frame_count % self._identify_every_n == 0)
+
+        if should_identify:
+            identification = self.predictor.identify(
+                static_features=static_vector,
+                gait_sequence=gait_sequence,
+            )
+            self._last_identification = identification
+        else:
+            identification = self._last_identification
 
         await self._refresh_user_name_map()
 
@@ -175,7 +192,7 @@ class StreamPipeline:
                 await FeatureProfileCRUD.upsert(
                     user_id=user_id,
                     static_vector=static_vector.tolist(),
-                    gait_sequence=None,
+                    gait_sequence=gait_sequence.tolist() if gait_sequence is not None else None,
                 )
 
                 profile = await FeatureProfileCRUD.get_by_user(user_id)
@@ -192,27 +209,27 @@ class StreamPipeline:
                 log.error("auto_enroll_failed", error=str(exc))
 
         latency = time.perf_counter() - t_start
-        if mode == "identify":
+        # Fire-and-forget: log to DB without blocking the pipeline response
+        if mode == "identify" and should_identify:
             try:
-                await IdentificationLogCRUD.log_identification(
-                    IdentificationLog(
-                        predicted_user_id=display_user,
-                        confidence=confidence,
-                        svm_confidence=float(
-                            identification.get("svm_prediction", {}).get("confidence", 0)
-                        )
-                        if identification.get("svm_prediction")
-                        else 0.0,
-                        lstm_confidence=float(
-                            identification.get("lstm_prediction", {}).get("confidence", 0)
-                        )
-                        if identification.get("lstm_prediction")
-                        else 0.0,
-                        feature_vector=static_vector.tolist(),
-                        model_version=identification.get("method", "none"),
-                        latency_ms=round(latency * 1000, 2),
+                log_entry = IdentificationLog(
+                    predicted_user_id=display_user,
+                    confidence=confidence,
+                    svm_confidence=float(
+                        identification.get("svm_prediction", {}).get("confidence", 0)
                     )
+                    if identification.get("svm_prediction")
+                    else 0.0,
+                    lstm_confidence=float(
+                        identification.get("lstm_prediction", {}).get("confidence", 0)
+                    )
+                    if identification.get("lstm_prediction")
+                    else 0.0,
+                    feature_vector=static_vector.tolist(),
+                    model_version=identification.get("method", "none"),
+                    latency_ms=round(latency * 1000, 2),
                 )
+                asyncio.create_task(IdentificationLogCRUD.log_identification(log_entry))
             except Exception as exc:
                 log.error("stream_log_failed", error=str(exc))
 
