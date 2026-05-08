@@ -1043,3 +1043,112 @@ body {
         padding: 1rem;
     }
 }
+
+/* ── Camera Source Toggle ──────────────────────────────────────────────────── */
+.cam-source-toggle {
+    display: flex;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 3px;
+    gap: 2px;
+}
+
+.cam-src-btn {
+    padding: 0.35rem 0.85rem;
+    border: none;
+    border-radius: calc(var(--radius-sm) - 2px);
+    background: transparent;
+    color: var(--text-muted);
+    font-family: var(--font);
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition);
+    white-space: nowrap;
+}
+
+.cam-src-btn.active {
+    background: var(--accent-gradient);
+    color: white;
+    box-shadow: 0 0 12px var(--accent-glow);
+}
+
+.cam-src-btn:not(.active):hover {
+    background: var(--glass-hover);
+    color: var(--text-primary);
+}
+
+/* ── IP Camera Config Bar ─────────────────────────────────────────────────── */
+.ipcam-config-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: rgba(6, 182, 212, 0.06);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+    border-radius: var(--radius-sm);
+    padding: 0.55rem 1rem;
+    margin-bottom: 1rem;
+    animation: fadeIn 0.2s ease;
+}
+
+.ipcam-label {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--info);
+    white-space: nowrap;
+    letter-spacing: 0.02em;
+}
+
+.ipcam-rtsp-input {
+    flex: 1;
+    padding: 0.35rem 0.65rem;
+    background: var(--glass);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-xs);
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    outline: none;
+    transition: border-color var(--transition);
+}
+
+.ipcam-rtsp-input:focus {
+    border-color: var(--info);
+    box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+}
+
+.ipcam-hint {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+}
+
+.ipcam-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    transition: all 0.3s ease;
+}
+
+.ipcam-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 8px var(--success-glow);
+    animation: pulse-dot 2s infinite;
+}
+
+.ipcam-dot.connecting {
+    background: var(--warning);
+    box-shadow: 0 0 8px rgba(245, 158, 11, 0.4);
+    animation: pulse-dot 0.8s infinite;
+}
+
+.ipcam-dot.disconnected {
+    background: var(--text-muted);
+}
+
+.ipcam-dot.error {
+    background: var(--danger);
+    box-shadow: 0 0 8px var(--danger-glow);
+}

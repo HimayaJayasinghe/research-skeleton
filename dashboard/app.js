@@ -8,6 +8,7 @@
 const API_BASE = window.location.origin;
 const WS_PROTOCOL = window.location.protocol === "https:" ? "wss:" : "ws:";
 const WS_URL = `${WS_PROTOCOL}//${window.location.host}/ws/stream`;
+const WS_IP_URL = `${WS_PROTOCOL}//${window.location.host}/ws/ip-stream`;
 
 // ── State ────────────────────────────────────────────────────────────────────
 const state = {
@@ -23,6 +24,11 @@ const state = {
     lastFpsTime: Date.now(),
     usePhoneCamera: false,
     phoneCameraUrl: "",
+    // Back-pressure: don't send next frame until server responds
+    waitingForResponse: false,
+    _lastSendTime: 0,
+    // Camera source: 'webcam' | 'ipcam'
+    cameraSource: "webcam",
 };
 
 // ── DOM References ───────────────────────────────────────────────────────────
@@ -73,9 +79,42 @@ function initTabs() {
 function initLiveFeed() {
     $("#btn-start-camera").addEventListener("click", startCamera);
     $("#btn-stop-camera").addEventListener("click", stopCamera);
+
+    // ── Camera source toggle ──
+    const btnWebcam = $("#btn-src-webcam");
+    const btnIpcam  = $("#btn-src-ipcam");
+    const ipcamBar  = $("#ipcam-config-bar");
+
+    btnWebcam.addEventListener("click", () => {
+        if (state.isStreaming) return; // don't switch mid-stream
+        state.cameraSource = "webcam";
+        btnWebcam.classList.add("active");
+        btnIpcam.classList.remove("active");
+        ipcamBar.classList.add("hidden");
+        $("#btn-start-camera").textContent = " Start Camera";
+        $("#btn-start-camera").prepend(Object.assign(document.createElement("span"), {textContent: "📷 "}));
+    });
+
+    btnIpcam.addEventListener("click", () => {
+        if (state.isStreaming) return; // don't switch mid-stream
+        state.cameraSource = "ipcam";
+        btnIpcam.classList.add("active");
+        btnWebcam.classList.remove("active");
+        ipcamBar.classList.remove("hidden");
+        $("#btn-start-camera").innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            Start IP Camera`;
+    });
 }
 
+
 async function startCamera() {
+    if (state.cameraSource === "ipcam") {
+        startIpCamera();
+        return;
+    }
+
+    // ── Webcam mode ──
     try {
         state.cameraStream = await navigator.mediaDevices.getUserMedia({
             video: { width: 640, height: 480, facingMode: "user" },
@@ -85,6 +124,10 @@ async function startCamera() {
         const video = $("#webcam-video");
         video.srcObject = state.cameraStream;
         await video.play();
+
+        // Show webcam video, hide ip cam img
+        video.classList.remove("hidden");
+        $("#ipcam-frame").classList.add("hidden");
 
         // Set canvas size
         const canvas = $("#skeleton-canvas");
@@ -96,21 +139,118 @@ async function startCamera() {
         $("#btn-start-camera").classList.add("hidden");
         $("#btn-stop-camera").classList.remove("hidden");
 
-        // Connect WebSocket
+        // Connect WebSocket and start sending frames
         connectWebSocket();
-
-        // Start sending frames
         state.isStreaming = true;
         scheduleFrameLoop();
 
-        toast("Camera started", "success");
+        toast("Webcam started", "success");
     } catch (err) {
         toast(`Camera error: ${err.message}`, "error");
     }
 }
 
+function startIpCamera() {
+    // ── IP Camera mode — server reads RTSP, pushes frames to us ──
+    const rtspUrl = $("#ipcam-rtsp-input").value.trim();
+
+    // Show IP cam img, hide webcam video
+    $("#webcam-video").classList.add("hidden");
+    const ipcamImg = $("#ipcam-frame");
+    ipcamImg.classList.remove("hidden");
+
+    // Canvas on top of img
+    const canvas = $("#skeleton-canvas");
+    canvas.width = 640;
+    canvas.height = 480;
+
+    $("#video-overlay").classList.add("hidden");
+    $("#btn-start-camera").classList.add("hidden");
+    $("#btn-stop-camera").classList.remove("hidden");
+
+    // Update IP status dot to connecting
+    setIpcamDot("connecting");
+
+    // Connect to the server-side IP stream WebSocket
+    if (state.ws) state.ws.close();
+    state.ws = new WebSocket(WS_IP_URL);
+    state.isStreaming = true;
+
+    state.ws.onopen = () => {
+        updateStatus(true);
+        toast("Connecting to IP camera via server…", "info");
+        // Override RTSP URL in .env at runtime by sending config message
+        if (rtspUrl) {
+            state.ws.send(JSON.stringify({ cmd: "set_rtsp", url: rtspUrl }));
+        }
+    };
+
+    state.ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        // Handle status/error messages from server
+        if (data.status === "discovering") {
+            $("#video-overlay-msg").textContent = data.msg || "Discovering RTSP path…";
+            $("#video-overlay").classList.remove("hidden");
+            setIpcamDot("connecting");
+            return;
+        }
+        if (data.status === "connected") {
+            $("#video-overlay").classList.add("hidden");
+            setIpcamDot("connected");
+            toast(`📡 ${data.msg}`, "success");
+            return;
+        }
+        if (data.error) {
+            setIpcamDot("error");
+            toast(`IP Camera error: ${data.error}`, "error");
+            $("#video-overlay-msg").textContent = data.error;
+            $("#video-overlay").classList.remove("hidden");
+            return;
+        }
+
+        // Display the server-pushed camera frame
+        if (data.camera_frame) {
+            ipcamImg.src = `data:image/jpeg;base64,${data.camera_frame}`;
+        }
+
+        // FPS counter
+        state.frameCount++;
+        const now = Date.now();
+        if (now - state.lastFpsTime >= 1000) {
+            state.fps = state.frameCount;
+            state.frameCount = 0;
+            state.lastFpsTime = now;
+            $("#fps-badge").textContent = `${state.fps} FPS`;
+        }
+
+        // Render skeleton and identification result (reuse existing handler)
+        handleStreamResult(data);
+    };
+
+    state.ws.onclose = () => {
+        updateStatus(false);
+        setIpcamDot("disconnected");
+        state.isStreaming = false;
+    };
+
+    state.ws.onerror = () => {
+        setIpcamDot("error");
+        toast("IP camera connection failed", "error");
+    };
+}
+
+function setIpcamDot(status) {
+    const dot = $("#ipcam-status-dot");
+    if (!dot) return;
+    dot.className = `ipcam-dot ${status}`;
+}
+
+
+
 function stopCamera() {
     state.isStreaming = false;
+    state.waitingForResponse = false;
 
     if (state.cameraStream) {
         state.cameraStream.getTracks().forEach((t) => t.stop());
@@ -130,6 +270,12 @@ function stopCamera() {
 
     const video = $("#webcam-video");
     video.srcObject = null;
+    video.classList.remove("hidden"); // always restore visibility
+
+    // Hide IP cam frame and reset its state
+    $("#ipcam-frame").classList.add("hidden");
+    $("#ipcam-frame").src = "";
+    setIpcamDot("disconnected");
 
     // Clear canvas
     const canvas = $("#skeleton-canvas");
@@ -138,6 +284,7 @@ function stopCamera() {
 
     // UI
     $("#video-overlay").classList.remove("hidden");
+    $("#video-overlay-msg").textContent = "Click \"Start Camera\" to begin";
     $("#btn-start-camera").classList.remove("hidden");
     $("#btn-stop-camera").classList.add("hidden");
     $("#id-badge").classList.add("hidden");
@@ -155,13 +302,20 @@ function connectWebSocket() {
         toast("Connected to server pipeline ✅", "success");
 
         if (state.isStreaming) {
+            state.waitingForResponse = false;
             scheduleFrameLoop();
         }
     };
 
     state.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
+        // Clear in-flight flag BEFORE handling result so next frame can be sent
+        state.waitingForResponse = false;
         handleStreamResult(data);
+        // Trigger next frame immediately — this is the back-pressure gate
+        if (state.isStreaming) {
+            scheduleFrameLoop(0);
+        }
     };
 
     state.ws.onclose = () => {
@@ -194,9 +348,14 @@ function sendFrameLoop() {
         return;
     }
 
-    // Back-pressure: skip frame if WebSocket send buffer is backed up
-    if (state.ws.bufferedAmount > 50000) {
-        scheduleFrameLoop(16);
+    // Back-pressure: only one frame in-flight at a time
+    if (state.waitingForResponse) {
+        return;
+    }
+
+    // Hard buffer limit safety net
+    if (state.ws.bufferedAmount > 15000) {
+        scheduleFrameLoop(50);
         return;
     }
 
@@ -218,7 +377,7 @@ function sendFrameLoop() {
     try {
         _offscreenCtx.drawImage(source, 0, 0, 480, 360);
 
-        // Get frame as base64
+        // Get frame as base64 JPEG (quality 0.4 keeps payload small)
         const dataUrl = _offscreenCanvas.toDataURL("image/jpeg", 0.4);
         const base64 = dataUrl.split(",")[1];
 
@@ -229,6 +388,8 @@ function sendFrameLoop() {
         };
 
         state.ws.send(JSON.stringify(msg));
+        state.waitingForResponse = true;  // gate: wait for server ack
+        state._lastSendTime = Date.now();
 
         // If it's a phone camera "shot" URL, refresh source for next loop
         if (state.isEnrolling && state.usePhoneCamera && state.phoneImage) {
@@ -237,6 +398,7 @@ function sendFrameLoop() {
         }
     } catch (e) {
         console.warn("Frame capture error (likely CORS):", e);
+        state.waitingForResponse = false;
     }
 
     // FPS counter
@@ -248,9 +410,7 @@ function sendFrameLoop() {
         state.lastFpsTime = now;
         $("#fps-badge").textContent = `${state.fps} FPS`;
     }
-
-    // Next frame — use rAF for vsync-aligned rendering
-    scheduleFrameLoop(0);
+    // NOTE: Next frame is triggered by onmessage, not here
 }
 
 function scheduleFrameLoop(delay = 0) {
@@ -309,7 +469,7 @@ function handleStreamResult(data) {
         }
     }
 
-    // Handle enrollment sample collection
+    // Handle enrollment sample collection (uses data from WebSocket response)
     if (state.isEnrolling && data.mode === "enroll" && data.features_ok) {
         enrollFrame(data);
     }
@@ -364,10 +524,7 @@ function handleStreamResult(data) {
         </div>
     `;
 
-    // Handle enrollment
-    if (state.isEnrolling && data.mode === "enroll" && data.features_ok) {
-        enrollFrame(data);
-    }
+    // Enrollment is already handled above (single call per frame)
 
     // Display status message in overlay
     if (state.isEnrolling && data.status_msg) {
@@ -606,6 +763,7 @@ function stopEnrollment() {
     state.isEnrolling = false;
     state.enrollUserId = null;
     state.isStreaming = false;
+    state.waitingForResponse = false;
     if (state.frameLoopTimer) {
         cancelAnimationFrame(state.frameLoopTimer);
         clearTimeout(state.frameLoopTimer);
@@ -642,52 +800,30 @@ function stopEnrollment() {
     );
 }
 
-async function enrollFrame(data) {
+function enrollFrame(data) {
     if (!state.enrollUserId) return;
 
-    // Throttle: don't send faster than every 250ms and don't send while previous is pending
-    if (state._enrollPending) return;
-    const now = Date.now();
-    if (state._lastEnrollTime && (now - state._lastEnrollTime) < 250) return;
+    // The WebSocket pipeline already saves enrollment data server-side
+    // (stream.py mode=="enroll") and returns progress in the response.
+    // No separate REST call needed — just read the WS response fields.
 
-    // Use REAL features from the WebSocket pipeline (not placeholder zeros!)
-    const staticFeatures = data.static_features;
-    if (!staticFeatures || staticFeatures.length === 0) {
-        return; // No features extracted this frame, skip
-    }
+    const framesCollected = data.frames_collected;
+    const progress = data.progress;
+    const enrollStatus = data.enrollment_status;
 
-    state._enrollPending = true;
-    state._lastEnrollTime = now;
+    // If the server didn't return enrollment fields, skip (frame may have been skipped)
+    if (framesCollected == null) return;
 
-    try {
-        const res = await fetch(`${API_BASE}/api/enroll/frame`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                user_id: state.enrollUserId,
-                static_features: staticFeatures,
-                gait_features: null,
-            }),
-        });
+    state.enrollFrameCount = framesCollected;
 
-        if (res.ok) {
-            const result = await res.json();
-            state.enrollFrameCount = result.frames_collected;
+    // Update progress bar
+    const pct = Math.min(progress || 0, 100);
+    $("#enroll-progress-bar").style.width = `${pct}%`;
+    $("#enroll-progress-text").textContent = `${framesCollected} frames (${Math.round(pct)}%)`;
 
-            // Update progress — use server-returned progress (based on min_enrollment_frames config)
-            const pct = Math.min(result.progress || 0, 100);
-            $("#enroll-progress-bar").style.width = `${pct}%`;
-            $("#enroll-progress-text").textContent = `${result.frames_collected} frames (${Math.round(pct)}%)`;
-
-            if (result.status === "completed") {
-                toast("Enrollment complete! ✅", "success");
-                stopEnrollment();
-            }
-        }
-    } catch (err) {
-        // Silent — don't spam errors during enrollment
-    } finally {
-        state._enrollPending = false;
+    if (enrollStatus === "completed") {
+        toast("Enrollment complete! ✅", "success");
+        stopEnrollment();
     }
 }
 

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
 
     # ── Model ─────────────────────────────────────────────────────────────────
     model_dir: str = "./models"
-    confidence_threshold: float = 0.65
+    confidence_threshold: float = 0.50
     svm_weight: float = 0.5
     lstm_weight: float = 0.5
 
@@ -39,8 +39,15 @@ class Settings(BaseSettings):
     target_fps: int = 30
     skip_frames: int = 1
 
+    # ── IP Camera (Hikvision / ONVIF) ─────────────────────────────────────────
+    ip_camera_host: str = ""
+    ip_camera_user: str = "admin"
+    ip_camera_pass: str = "admin"
+    ip_camera_rtsp_url: str = ""
+    ip_camera_snapshot_url: str = ""
+
     # ── Pose Estimation ───────────────────────────────────────────────────────
-    mediapipe_model_complexity: int = 1
+    mediapipe_model_complexity: int = 0  # 0=fastest, 1=balanced, 2=most accurate
     min_detection_confidence: float = 0.3
     min_tracking_confidence: float = 0.3
 

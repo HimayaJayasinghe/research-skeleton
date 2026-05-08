@@ -1,17 +1,21 @@
 """
 services/pose_estimation/estimator.py
-Extracts 33 skeleton keypoints using MediaPipe Pose.
+Extracts 33 skeleton keypoints using MediaPipe Pose (Tasks API).
+
+Updated from legacy mp.solutions.pose to mediapipe.tasks.python.vision.PoseLandmarker
+which is required for mediapipe >= 0.10.14.
 """
-try:
-    import mediapipe as mp
-    from mediapipe.python.solutions import pose as mp_pose
-    from mediapipe.python.solutions import drawing_utils as mp_drawing
-    from mediapipe.python.solutions import drawing_styles as mp_drawing_styles
-except ImportError:
-    import mediapipe as mp
-    mp_pose, mp_drawing, mp_drawing_styles = None, None, None
+import mediapipe as mp
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import (
+    PoseLandmarker,
+    PoseLandmarkerOptions,
+    RunningMode,
+)
 import numpy as np
+import cv2
 import structlog
+from pathlib import Path
 from typing import Optional, Dict, List
 from dataclasses import dataclass, asdict
 
@@ -30,7 +34,10 @@ class Keypoint:
 
 
 class PoseEstimator:
-    """MediaPipe Pose wrapper for skeleton keypoint extraction."""
+    """MediaPipe PoseLandmarker wrapper for skeleton keypoint extraction.
+
+    Uses the new Tasks API (mediapipe >= 0.10.14).
+    """
 
     LANDMARK_NAMES = [
         "nose", "left_eye_inner", "left_eye", "left_eye_outer",
@@ -54,6 +61,13 @@ class PoseEstimator:
         "left_ankle": 27, "right_ankle": 28,
     }
 
+    # Map model_complexity (0, 1, 2) to task model files
+    _MODEL_FILES = {
+        0: "pose_landmarker_lite.task",
+        1: "pose_landmarker_full.task",
+        2: "pose_landmarker_heavy.task",
+    }
+
     def __init__(
         self,
         static_image_mode: bool = False,
@@ -61,21 +75,51 @@ class PoseEstimator:
         min_detection_confidence: float = 0.5,
         min_tracking_confidence: float = 0.5,
     ):
-        self.mp_pose = mp_pose or mp.solutions.pose
-        self.mp_drawing = mp_drawing or mp.solutions.drawing_utils
-        self.mp_drawing_styles = mp_drawing_styles or mp.solutions.drawing_styles
+        # Resolve model path
+        model_dir = Path(__file__).resolve().parent.parent.parent / "models"
+        model_file = self._MODEL_FILES.get(model_complexity, self._MODEL_FILES[0])
+        model_path = model_dir / model_file
 
-        self.pose = self.mp_pose.Pose(
-            static_image_mode=static_image_mode,
-            model_complexity=model_complexity,
-            enable_segmentation=False,
-            min_detection_confidence=min_detection_confidence,
+        if not model_path.exists():
+            # Fall back to whichever model exists
+            for complexity in [0, 1, 2]:
+                fallback = model_dir / self._MODEL_FILES[complexity]
+                if fallback.exists():
+                    model_path = fallback
+                    log.warning(
+                        "pose_model_fallback",
+                        requested=model_file,
+                        using=fallback.name,
+                    )
+                    break
+            else:
+                raise FileNotFoundError(
+                    f"No pose landmarker model found in {model_dir}. "
+                    f"Download from https://developers.google.com/mediapipe/solutions/vision/pose_landmarker#models"
+                )
+
+        running_mode = RunningMode.IMAGE if static_image_mode else RunningMode.VIDEO
+
+        options = PoseLandmarkerOptions(
+            base_options=BaseOptions(model_asset_path=str(model_path)),
+            running_mode=running_mode,
+            num_poses=1,
+            min_pose_detection_confidence=min_detection_confidence,
             min_tracking_confidence=min_tracking_confidence,
+            min_pose_presence_confidence=min_detection_confidence,
         )
+
+        self.landmarker = PoseLandmarker.create_from_options(options)
+        self._running_mode = running_mode
+        self._static = static_image_mode
+        self._frame_timestamp_ms = 0
+
         log.info(
             "pose_estimator_initialized",
+            model=model_path.name,
             complexity=model_complexity,
             det_conf=min_detection_confidence,
+            mode=running_mode.name,
         )
 
     def estimate(self, rgb_frame: np.ndarray) -> Optional[List[Dict]]:
@@ -87,16 +131,27 @@ class PoseEstimator:
         Returns:
             List of 33 keypoint dicts, or None if no person detected.
         """
-        results = self.pose.process(rgb_frame)
+        mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
 
-        if results.pose_landmarks is None:
+        if self._static:
+            results = self.landmarker.detect(mp_image)
+        else:
+            self._frame_timestamp_ms += 33  # ~30fps
+            results = self.landmarker.detect_for_video(
+                mp_image, self._frame_timestamp_ms
+            )
+
+        if not results.pose_landmarks or len(results.pose_landmarks) == 0:
             return None
 
+        # Take the first detected pose
+        landmarks = results.pose_landmarks[0]
+
         keypoints = []
-        for idx, landmark in enumerate(results.pose_landmarks.landmark):
+        for idx, landmark in enumerate(landmarks):
             kp = Keypoint(
                 index=idx,
-                name=self.LANDMARK_NAMES[idx],
+                name=self.LANDMARK_NAMES[idx] if idx < len(self.LANDMARK_NAMES) else f"landmark_{idx}",
                 x=float(landmark.x),
                 y=float(landmark.y),
                 z=float(landmark.z),
@@ -143,7 +198,7 @@ class PoseEstimator:
         cached_keypoints: Optional[List[Dict]] = None
     ) -> np.ndarray:
         """Draw skeleton overlay on BGR frame for visualization.
-        
+
         If cached_keypoints is provided, draws without re-running pose estimation.
         """
         annotated = bgr_frame.copy()
@@ -152,20 +207,11 @@ class PoseEstimator:
             # Use cached keypoints to avoid running pose estimation again
             return self.draw_on_frame_with_results(annotated, cached_keypoints)
 
-        results = self.pose.process(rgb_frame)
+        # Re-run estimation and draw
+        all_kps = self.estimate(rgb_frame)
+        if all_kps:
+            return self.draw_on_frame_with_results(annotated, all_kps)
 
-        if results.pose_landmarks:
-            self.mp_drawing.draw_landmarks(
-                annotated,
-                results.pose_landmarks,
-                self.mp_pose.POSE_CONNECTIONS,
-                landmark_drawing_spec=self.mp_drawing.DrawingSpec(
-                    color=(0, 255, 0), thickness=2, circle_radius=3
-                ),
-                connection_drawing_spec=self.mp_drawing.DrawingSpec(
-                    color=(0, 200, 255), thickness=2
-                ),
-            )
         return annotated
 
     def draw_on_frame_with_results(
@@ -176,7 +222,6 @@ class PoseEstimator:
         h, w = annotated.shape[:2]
 
         # Draw connections first (behind dots)
-        import cv2
         connections = [
             (11, 13), (13, 15), (12, 14), (14, 16),  # Arms
             (11, 12), (23, 24),  # Shoulders, Hips
@@ -203,7 +248,7 @@ class PoseEstimator:
 
     def close(self):
         """Release MediaPipe resources."""
-        self.pose.close()
+        self.landmarker.close()
         log.info("pose_estimator_closed")
 
     def __enter__(self):

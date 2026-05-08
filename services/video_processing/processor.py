@@ -70,9 +70,9 @@ class VideoProcessor:
                 log.error("camera_open_failed", index=self.camera_index)
                 raise RuntimeError(f"Cannot open camera {self.camera_index}")
 
-            # Optimal settings for local webcam
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
+            # Capture at processing resolution — no need for high-res capture
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             self.cap.set(cv2.CAP_PROP_FPS, 30)
 
         self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Minimize latency

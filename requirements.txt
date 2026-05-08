@@ -6,7 +6,8 @@ ultralytics>=8.1.0          # YOLOv8 + ByteTrack built-in
 # ── Deep Learning ─────────────────────────────────────────────────────────────
 torch>=2.2.0
 torchvision>=0.17.0
-facenet-pytorch>=2.6.0      # MTCNN + InceptionResnetV1 (FaceNet)
+# facenet-pytorch>=2.6.0    # Install separately: pip install facenet-pytorch --no-deps
+                             # (its numpy<2.0.0 pin conflicts with Python 3.13)
 
 # ── API & Server ──────────────────────────────────────────────────────────────
 fastapi>=0.110.0
@@ -21,7 +22,7 @@ pydantic>=2.6.0
 pydantic-settings>=2.2.0
 
 # ── Data Science ──────────────────────────────────────────────────────────────
-numpy>=1.26.0,<2.0.0
+numpy>=1.26.0
 pandas>=2.2.0
 scikit-learn>=1.4.0
 scipy>=1.12.0
